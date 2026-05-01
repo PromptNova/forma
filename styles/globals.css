@@ -1,0 +1,167 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0e0d0b;
+  --panel: #181614;
+  --p2: #1f1c19;
+  --p3: #27231e;
+  --bd: rgba(255,243,220,.055);
+  --bd2: rgba(255,243,220,.10);
+  --t: #f5ede0;
+  --t2: #9e9182;
+  --t3: #5a5045;
+  --acc: #d4754a;
+  --acc2: #e08a60;
+  --gr: #3ec87a;
+  --rd: #e05252;
+}
+
+:root.light {
+  --bg: #f5f1ea;
+  --panel: #ede9e1;
+  --p2: #e5e0d6;
+  --p3: #ddd8cc;
+  --bd: rgba(60,40,20,.08);
+  --bd2: rgba(60,40,20,.15);
+  --t: #1a1612;
+  --t2: #6b5e4e;
+  --t3: #9e8f7a;
+  --acc: #d4754a;
+  --acc2: #e08a60;
+  --gr: #2a9e5c;
+  --rd: #c04040;
+}
+
+:root.bw {
+  --bg: #0a0a0a;
+  --panel: #141414;
+  --p2: #1e1e1e;
+  --p3: #282828;
+  --bd: rgba(255,255,255,.06);
+  --bd2: rgba(255,255,255,.12);
+  --t: #f0f0f0;
+  --t2: #888;
+  --t3: #555;
+  --acc: #888;
+  --acc2: #aaa;
+  --gr: #666;
+  --rd: #666;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--t);
+  font-family: 'DM Sans', sans-serif;
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bd2);
+  border-radius: 2px;
+}
+
+button {
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--p2);
+  color: var(--t);
+  border: 1px solid var(--bd);
+  border-radius: 6px;
+  outline: none;
+}
+
+input:focus {
+  border-color: var(--bd2);
+}
+
+.font-syne { font-family: 'Syne', sans-serif; }
+.font-dm { font-family: 'DM Sans', sans-serif; }
+.font-mono-dm { font-family: 'DM Mono', monospace; }
+
+/* Stat number flash animation */
+@keyframes statFlash {
+  0% { transform: translateY(0); color: var(--t); }
+  30% { transform: translateY(-3px); color: var(--acc); }
+  100% { transform: translateY(0); color: var(--t); }
+}
+
+.stat-flash {
+  animation: statFlash 400ms ease-out;
+}
+
+/* Spring scale in for parts */
+@keyframes springIn {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Shake animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+.shake {
+  animation: shake 200ms ease-in-out;
+}
+
+/* Snap ring */
+@keyframes snapRing {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Pulsing red overlay */
+@keyframes pulseRed {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+.instability-overlay {
+  animation: pulseRed 2s ease-in-out infinite;
+}
+
+/* Fade up */
+@keyframes fadeUp {
+  from { transform: translateY(6px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.fade-up {
+  animation: fadeUp 200ms ease-out forwards;
+}
+
+/* Logo pulse */
+@keyframes logoPulse {
+  0%, 100% { filter: drop-shadow(0 0 0px var(--gr)); }
+  50% { filter: drop-shadow(0 0 8px var(--gr)); }
+}
+
+.logo-stable {
+  animation: logoPulse 2s ease-in-out infinite;
+}
