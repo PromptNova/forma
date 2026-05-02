@@ -1,14 +1,25 @@
 import { create } from 'zustand'
 import { PlacedPart, PRESETS, PresetName } from './parts'
 import { validatePhysics, PhysicsResult } from './physics'
+import {
+  saveDesignToSupabase,
+  updateDesignInSupabase,
+  loadDesignsFromSupabase,
+  shareDesignInSupabase,
+  getCurrentUser,
+  type DesignRow,
+} from './supabase'
 
 export type Theme = 'dark' | 'light' | 'bw'
 export type CameraView = 'perspective' | 'front' | 'side' | 'top'
 
 interface FormaState {
+  // ── Design state ───────────────────────────────────────────
   parts: PlacedPart[]
   selectedId: string | null
   physics: PhysicsResult | null
+
+  // ── UI state ───────────────────────────────────────────────
   theme: Theme
   showGrid: boolean
   showCoM: boolean
@@ -24,8 +35,19 @@ interface FormaState {
   showTutorial: boolean
   tutorialStep: number
   sidebarTab: 'parts' | 'real' | 'presets'
+
+  // ── History ────────────────────────────────────────────────
   history: PlacedPart[][]
   historyIndex: number
+
+  // ── Cloud state ────────────────────────────────────────────
+  cloudDesigns: DesignRow[]
+  cloudSaving: boolean
+  cloudLoading: boolean
+  cloudError: string | null
+  currentDesignId: string | null  // ID of the design currently being edited
+
+  // ── Design actions ─────────────────────────────────────────
   addPart: (part: PlacedPart) => void
   removePart: (id: string) => void
   updatePart: (id: string, updates: Partial<PlacedPart>) => void
@@ -33,6 +55,8 @@ interface FormaState {
   duplicatePart: (id: string) => void
   clearAll: () => void
   loadPreset: (name: PresetName) => void
+
+  // ── UI actions ─────────────────────────────────────────────
   setTheme: (theme: Theme) => void
   setShowGrid: (v: boolean) => void
   setShowCoM: (v: boolean) => void
@@ -48,15 +72,23 @@ interface FormaState {
   setShowTutorial: (v: boolean) => void
   setTutorialStep: (v: number) => void
   setSidebarTab: (v: 'parts' | 'real' | 'presets') => void
+
+  // ── History actions ────────────────────────────────────────
   undo: () => void
   redo: () => void
   runPhysics: () => void
+
+  // ── Cloud actions ──────────────────────────────────────────
+  saveDesign: (name?: string) => Promise<string | null>
+  loadDesigns: () => Promise<void>
+  shareDesign: (designId?: string) => Promise<string | null>
 }
 
 let _idCounter = 0
 function newId() { return 'p' + (++_idCounter) + '_' + Date.now() }
 
-export const useFormaStore = create<FormaState>((set) => ({
+export const useFormaStore = create<FormaState>((set, get) => ({
+  // ── Initial state ─────────────────────────────────────────
   parts: [],
   selectedId: null,
   physics: null,
@@ -77,7 +109,13 @@ export const useFormaStore = create<FormaState>((set) => ({
   sidebarTab: 'parts',
   history: [[]],
   historyIndex: 0,
+  cloudDesigns: [],
+  cloudSaving: false,
+  cloudLoading: false,
+  cloudError: null,
+  currentDesignId: null,
 
+  // ── Design actions ─────────────────────────────────────────
   addPart: (part) => set((state) => {
     const newPart = { ...part, id: newId() }
     const parts = [...state.parts, newPart]
@@ -127,7 +165,14 @@ export const useFormaStore = create<FormaState>((set) => ({
 
   clearAll: () => set((state) => {
     const newHistory = [...state.history.slice(0, state.historyIndex + 1), []].slice(-50)
-    return { parts: [], selectedId: null, physics: null, history: newHistory, historyIndex: newHistory.length - 1 }
+    return {
+      parts: [],
+      selectedId: null,
+      physics: null,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      currentDesignId: null,
+    }
   }),
 
   loadPreset: (name) => set((state) => {
@@ -144,6 +189,7 @@ export const useFormaStore = create<FormaState>((set) => ({
     }
   }),
 
+  // ── UI actions ─────────────────────────────────────────────
   setTheme: (theme) => set({ theme }),
   setShowGrid: (showGrid) => set({ showGrid }),
   setShowCoM: (showCoM) => set({ showCoM }),
@@ -160,6 +206,7 @@ export const useFormaStore = create<FormaState>((set) => ({
   setTutorialStep: (tutorialStep) => set({ tutorialStep }),
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
 
+  // ── History actions ────────────────────────────────────────
   undo: () => set((state) => {
     if (state.historyIndex <= 0) return state
     const newIndex = state.historyIndex - 1
@@ -174,5 +221,90 @@ export const useFormaStore = create<FormaState>((set) => ({
     return { parts, historyIndex: newIndex, physics: validatePhysics(parts), selectedId: null }
   }),
 
-  runPhysics: () => set((state) => ({ physics: validatePhysics(state.parts) })),
+  runPhysics: () => set((state) => ({
+    physics: validatePhysics(state.parts)
+  })),
+
+  // ── Cloud actions ──────────────────────────────────────────
+  saveDesign: async (name?: string) => {
+    set({ cloudSaving: true, cloudError: null })
+    try {
+      const user = await getCurrentUser()
+      if (!user) {
+        set({ cloudSaving: false, cloudError: 'Not signed in' })
+        return null
+      }
+      const state = get()
+      const designName = name || `Design ${new Date().toLocaleDateString('nl-NL')}`
+
+      let savedId: string
+      if (state.currentDesignId) {
+        // Update existing design
+        await updateDesignInSupabase(state.currentDesignId, {
+          name: designName,
+          parts: state.parts,
+          theme: state.theme,
+        })
+        savedId = state.currentDesignId
+      } else {
+        // Create new design
+        const saved = await saveDesignToSupabase({
+          name: designName,
+          parts: state.parts,
+          theme: state.theme,
+          userId: user.id,
+        })
+        savedId = saved.id
+      }
+
+      set({ cloudSaving: false, currentDesignId: savedId })
+      return savedId
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Save failed'
+      set({ cloudSaving: false, cloudError: msg })
+      return null
+    }
+  },
+
+  loadDesigns: async () => {
+    set({ cloudLoading: true, cloudError: null })
+    try {
+      const user = await getCurrentUser()
+      if (!user) {
+        set({ cloudLoading: false })
+        return
+      }
+      const designs = await loadDesignsFromSupabase(user.id)
+      set({ cloudDesigns: designs, cloudLoading: false })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Load failed'
+      set({ cloudLoading: false, cloudError: msg })
+    }
+  },
+
+  shareDesign: async (designId?: string) => {
+    const state = get()
+    const id = designId || state.currentDesignId
+    if (!id) {
+      // Save first if no design ID
+      const savedId = await state.saveDesign()
+      if (!savedId) return null
+      try {
+        const token = await shareDesignInSupabase(savedId)
+        const shareUrl = `${window.location.origin}/share/${token}`
+        set({ currentDesignId: savedId })
+        return shareUrl
+      } catch (err) {
+        set({ cloudError: err instanceof Error ? err.message : 'Share failed' })
+        return null
+      }
+    }
+    try {
+      const token = await shareDesignInSupabase(id)
+      return `${window.location.origin}/share/${token}`
+    } catch (err) {
+      set({ cloudError: err instanceof Error ? err.message : 'Share failed' })
+      return null
+    }
+  },
 }))
