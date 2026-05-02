@@ -1,5 +1,4 @@
 'use client'
-
 import { useEffect, useRef, useCallback } from 'react'
 import * as THREE from 'three'
 import { useFormaStore } from '../lib/store'
@@ -8,15 +7,19 @@ import PhysicsHUD from './PhysicsHUD'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // ──────────────────────────────────────────────────────────────
-//  FORMA 3D — Three.js Physics Studio
+// FORMA 3D — Three.js Physics Studio
 // ──────────────────────────────────────────────────────────────
 
-const GRID_SIZE = 0.1  // 10cm snap grid
+const GRID_SIZE = 0.1 // 10cm snap grid
 
 function snapToGrid(v: number, snap: boolean) {
   if (!snap) return v
   return Math.round(v / GRID_SIZE) * GRID_SIZE
 }
+
+// Expose renderer for export
+let _renderer: THREE.WebGLRenderer | null = null
+export function getRenderer() { return _renderer }
 
 export default function Forma3D() {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -29,6 +32,7 @@ export default function Forma3D() {
     grid: THREE.GridHelper
     animFrame: number
   } | null>(null)
+
   const stateRef = useRef({
     isDraggingPart: false,
     isOrbiting: false,
@@ -47,13 +51,17 @@ export default function Forma3D() {
   const storeRef = useRef(store)
   storeRef.current = store
 
-  // ── Initialize Three.js ─────────────────────────────────────
+  // ── Initialize Three.js ───────────────────────────────────
   useEffect(() => {
     const mount = mountRef.current
     if (!mount) return
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    // Renderer with preserveDrawingBuffer for PNG export
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true,
+    })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     renderer.shadowMap.enabled = true
@@ -61,6 +69,7 @@ export default function Forma3D() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.2
     mount.appendChild(renderer.domElement)
+    _renderer = renderer
 
     // Scene
     const scene = new THREE.Scene()
@@ -69,11 +78,10 @@ export default function Forma3D() {
 
     // Camera
     const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / mount.clientHeight, 0.01, 100)
-    
+
     // Lighting
     const ambient = new THREE.AmbientLight(0xfff3dc, 0.6)
     scene.add(ambient)
-    
     const sunLight = new THREE.DirectionalLight(0xfff3dc, 1.2)
     sunLight.position.set(3, 5, 4)
     sunLight.castShadow = true
@@ -86,7 +94,6 @@ export default function Forma3D() {
     sunLight.shadow.camera.bottom = -3
     sunLight.shadow.bias = -0.001
     scene.add(sunLight)
-
     const fillLight = new THREE.DirectionalLight(0x8090ff, 0.3)
     fillLight.position.set(-2, 2, -2)
     scene.add(fillLight)
@@ -106,9 +113,7 @@ export default function Forma3D() {
     scene.add(grid)
 
     // Store refs
-    sceneRef.current = {
-      renderer, scene, camera, meshes: new Map(), ground, grid, animFrame: 0
-    }
+    sceneRef.current = { renderer, scene, camera, meshes: new Map(), ground, grid, animFrame: 0 }
 
     // Camera positioning
     const updateCamera = () => {
@@ -123,9 +128,9 @@ export default function Forma3D() {
 
     // Animation loop
     const animate = () => {
-      const s = sceneRef.current!
+      const sc = sceneRef.current!
       const st = storeRef.current
-      
+
       // Auto-rotate
       if (st.autoRotate) {
         stateRef.current.cameraTheta += 0.007
@@ -135,13 +140,13 @@ export default function Forma3D() {
       // Update part meshes from store
       const storeParts = st.parts
       const physics = st.physics
-      const meshes = s.meshes
+      const meshes = sc.meshes
 
       // Remove deleted parts
       meshes.forEach((mesh, id) => {
         if (!storeParts.find(p => p.id === id)) {
-          s.scene.remove(mesh)
-          mesh.geometry.dispose()
+          sc.scene.remove(mesh)
+          if (mesh.geometry) mesh.geometry.dispose()
           meshes.delete(id)
         }
       })
@@ -150,14 +155,12 @@ export default function Forma3D() {
       storeParts.forEach(part => {
         const def = PARTS[part.type]
         if (!def) return
-
         let mesh = meshes.get(part.id)
-        
         if (!mesh) {
           // Create new mesh
           const geo = new THREE.BoxGeometry(def.w, def.h, def.d)
           const mat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(def.color),
+            color: new THREE.Color(part.color || def.color),
             roughness: 0.7,
             metalness: 0.1,
           })
@@ -166,7 +169,7 @@ export default function Forma3D() {
           mesh.receiveShadow = true
           mesh.name = part.id
           mesh.userData = { partId: part.id, partType: part.type }
-          s.scene.add(mesh)
+          sc.scene.add(mesh)
           meshes.set(part.id, mesh)
         }
 
@@ -178,7 +181,7 @@ export default function Forma3D() {
         const mat = mesh.material as THREE.MeshStandardMaterial
         const status = physics?.perPartStatus[part.id]
         const selected = stateRef.current.selectedId === part.id
-        
+
         if (selected) {
           mat.emissive.setHex(0x2a1f10)
           mat.emissiveIntensity = 1
@@ -193,7 +196,7 @@ export default function Forma3D() {
           mat.emissiveIntensity = 0
         }
 
-        // Selection outline via scale pulse
+        // Selection pulse via scale
         if (selected) {
           const pulse = 1 + Math.sin(Date.now() * 0.005) * 0.005
           mesh.scale.setScalar(pulse)
@@ -203,35 +206,51 @@ export default function Forma3D() {
       })
 
       // Update grid visibility
-      s.grid.visible = st.showGrid
+      sc.grid.visible = st.showGrid
+
+      // Update shadows
+      sc.renderer.shadowMap.enabled = st.showShadows
+
+      // Update theme background
+      const theme = st.theme
+      if (theme === 'light') {
+        sc.scene.background = new THREE.Color(0xf5f1ea)
+      } else if (theme === 'bw') {
+        sc.scene.background = new THREE.Color(0x0a0a0a)
+      } else {
+        sc.scene.background = new THREE.Color(0x0e0d0b)
+      }
 
       // Render
-      s.renderer.render(s.scene, s.camera)
-      s.animFrame = requestAnimationFrame(animate)
+      sc.renderer.render(sc.scene, sc.camera)
+      sc.animFrame = requestAnimationFrame(animate)
     }
     animate()
 
     // Resize
     const handleResize = () => {
       if (!mount || !sceneRef.current) return
-      const { renderer, camera } = sceneRef.current
+      const { renderer: r, camera: c } = sceneRef.current
       const w = mount.clientWidth, h = mount.clientHeight
-      renderer.setSize(w, h)
-      camera.aspect = w / h
-      camera.updateProjectionMatrix()
+      r.setSize(w, h)
+      c.aspect = w / h
+      c.updateProjectionMatrix()
     }
     window.addEventListener('resize', handleResize)
 
     return () => {
       cancelAnimationFrame(sceneRef.current!.animFrame)
       window.removeEventListener('resize', handleResize)
-      mount.removeChild(renderer.domElement)
+      _renderer = null
+      if (mount.contains(renderer.domElement)) {
+        mount.removeChild(renderer.domElement)
+      }
       renderer.dispose()
     }
   }, [])
 
-  // ── Mouse Events ────────────────────────────────────────────
-  const getIntersects = useCallback((e: MouseEvent | React.MouseEvent) => {
+  // ── Mouse Events ──────────────────────────────────────────
+  const getIntersects = useCallback((e: React.MouseEvent) => {
     const mount = mountRef.current
     const sc = sceneRef.current
     if (!mount || !sc) return []
@@ -262,17 +281,17 @@ export default function Forma3D() {
       s.dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -mesh.position.y)
       const raycaster = new THREE.Raycaster()
       const rect = mountRef.current!.getBoundingClientRect()
-      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-      raycaster.setFromCamera({ x, y }, sc.camera)
+      const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      const my = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera({ x: mx, y: my }, sc.camera)
       const pt = new THREE.Vector3()
       raycaster.ray.intersectPlane(s.dragPlane, pt)
-      s.dragOffset.subVectors(mesh.position, pt)
+      if (pt) s.dragOffset.subVectors(mesh.position, pt)
     } else {
       // Orbit
       s.isOrbiting = true
       s.isDraggingPart = false
-      if (e.button === 0 || e.button === 2) {
+      if (e.button === 0) {
         storeRef.current.selectPart(null)
         s.selectedId = null
         s.selectedMesh = null
@@ -297,38 +316,34 @@ export default function Forma3D() {
     }
 
     if (s.isDraggingPart && s.selectedId) {
-      // Drag part
+      // Drag part in XZ plane
       const raycaster = new THREE.Raycaster()
       const rect = mountRef.current!.getBoundingClientRect()
-      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-      raycaster.setFromCamera({ x, y }, sc.camera)
+      const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      const my = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera({ x: mx, y: my }, sc.camera)
       const pt = new THREE.Vector3()
       raycaster.ray.intersectPlane(s.dragPlane, pt)
-      pt.add(s.dragOffset)
-
-      const snap = storeRef.current.snapEnabled
-      const newX = snapToGrid(pt.x, snap)
-      const newZ = snapToGrid(pt.z, snap)
-      
-      storeRef.current.updatePart(s.selectedId, { x: newX, z: newZ })
+      if (pt) {
+        pt.add(s.dragOffset)
+        const snap = storeRef.current.snapEnabled
+        const newX = snapToGrid(pt.x, snap)
+        const newZ = snapToGrid(pt.z, snap)
+        storeRef.current.updatePart(s.selectedId, { x: newX, z: newZ })
+      }
     } else if (s.isOrbiting) {
-      // Orbit camera
-      const dx = (e.clientX - s.lastMouse.x) * 0.01
-      const dy = (e.clientY - s.lastMouse.y) * 0.01
+      // Orbit camera 360°
+      const speed = storeRef.current.cameraSpeed || 1
+      const dx = (e.clientX - s.lastMouse.x) * 0.01 * speed
+      const dy = (e.clientY - s.lastMouse.y) * 0.01 * speed
       s.cameraTheta -= dx
       s.cameraPhi = Math.max(0.1, Math.min(Math.PI / 2.1, s.cameraPhi + dy))
-      
-      const sc2 = sceneRef.current
-      if (sc2) {
-        const x = s.cameraTarget.x + s.cameraRadius * Math.sin(s.cameraPhi) * Math.sin(s.cameraTheta)
-        const y = s.cameraTarget.y + s.cameraRadius * Math.cos(s.cameraPhi)
-        const z = s.cameraTarget.z + s.cameraRadius * Math.sin(s.cameraPhi) * Math.cos(s.cameraTheta)
-        sc2.camera.position.set(x, y, z)
-        sc2.camera.lookAt(s.cameraTarget)
-      }
+      const x = s.cameraTarget.x + s.cameraRadius * Math.sin(s.cameraPhi) * Math.sin(s.cameraTheta)
+      const y = s.cameraTarget.y + s.cameraRadius * Math.cos(s.cameraPhi)
+      const z = s.cameraTarget.z + s.cameraRadius * Math.sin(s.cameraPhi) * Math.cos(s.cameraTheta)
+      sc.camera.position.set(x, y, z)
+      sc.camera.lookAt(s.cameraTarget)
     }
-
     s.lastMouse = { x: e.clientX, y: e.clientY }
   }, [getIntersects])
 
@@ -376,10 +391,7 @@ export default function Forma3D() {
             exit={{ opacity: 0 }}
             className="instability-overlay"
             style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
+              position: 'absolute', bottom: 0, left: 0, right: 0,
               height: '50%',
               background: 'radial-gradient(ellipse at 50% 100%, rgba(224,82,82,0.12) 0%, transparent 70%)',
               pointerEvents: 'none',
@@ -397,10 +409,7 @@ export default function Forma3D() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
+              position: 'absolute', bottom: 0, left: 0, right: 0,
               height: '40%',
               background: 'radial-gradient(ellipse at 50% 100%, rgba(62,200,122,0.06) 0%, transparent 70%)',
               pointerEvents: 'none',
@@ -415,49 +424,35 @@ export default function Forma3D() {
 
       {/* Camera views floating top */}
       <div style={{
-        position: 'absolute',
-        top: 12,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: 4,
-        background: 'var(--panel)',
-        border: '1px solid var(--bd)',
-        borderRadius: 10,
-        padding: '3px 4px',
-        zIndex: 20,
+        position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 4,
+        background: 'var(--panel)', border: '1px solid var(--bd)',
+        borderRadius: 10, padding: '3px 4px', zIndex: 20,
       }}>
         {(['perspective', 'front', 'side', 'top'] as const).map(view => (
-          <button
-            key={view}
-            onClick={() => {
-              useFormaStore.getState().setCameraView(view)
-              const s = stateRef.current
-              // Reset camera angles for each view
-              if (view === 'perspective') { s.cameraTheta = Math.PI/4; s.cameraPhi = Math.PI/3; s.cameraRadius = 2.5 }
-              if (view === 'front') { s.cameraTheta = 0; s.cameraPhi = Math.PI/2.5; s.cameraRadius = 2.5 }
-              if (view === 'side') { s.cameraTheta = Math.PI/2; s.cameraPhi = Math.PI/2.5; s.cameraRadius = 2.5 }
-              if (view === 'top') { s.cameraTheta = 0; s.cameraPhi = 0.1; s.cameraRadius = 3 }
-              const sc = sceneRef.current
-              if (sc) {
-                const x = s.cameraTarget.x + s.cameraRadius * Math.sin(s.cameraPhi) * Math.sin(s.cameraTheta)
-                const y = s.cameraTarget.y + s.cameraRadius * Math.cos(s.cameraPhi)
-                const z = s.cameraTarget.z + s.cameraRadius * Math.sin(s.cameraPhi) * Math.cos(s.cameraTheta)
-                sc.camera.position.set(x, y, z)
-                sc.camera.lookAt(s.cameraTarget)
-              }
-            }}
+          <button key={view} onClick={() => {
+            useFormaStore.getState().setCameraView(view)
+            const s = stateRef.current
+            if (view === 'perspective') { s.cameraTheta = Math.PI/4; s.cameraPhi = Math.PI/3; s.cameraRadius = 2.5 }
+            if (view === 'front') { s.cameraTheta = 0; s.cameraPhi = Math.PI/2.5; s.cameraRadius = 2.5 }
+            if (view === 'side') { s.cameraTheta = Math.PI/2; s.cameraPhi = Math.PI/2.5; s.cameraRadius = 2.5 }
+            if (view === 'top') { s.cameraTheta = 0; s.cameraPhi = 0.1; s.cameraRadius = 3 }
+            const sc = sceneRef.current
+            if (sc) {
+              const x = s.cameraTarget.x + s.cameraRadius * Math.sin(s.cameraPhi) * Math.sin(s.cameraTheta)
+              const y = s.cameraTarget.y + s.cameraRadius * Math.cos(s.cameraPhi)
+              const z = s.cameraTarget.z + s.cameraRadius * Math.sin(s.cameraPhi) * Math.cos(s.cameraTheta)
+              sc.camera.position.set(x, y, z)
+              sc.camera.lookAt(s.cameraTarget)
+            }
+          }}
             style={{
               padding: '4px 10px',
               background: store.cameraView === view ? 'var(--p3)' : 'transparent',
-              border: 'none',
-              borderRadius: 7,
+              border: 'none', borderRadius: 7,
               color: store.cameraView === view ? 'var(--t)' : 'var(--t3)',
-              fontSize: 11,
-              fontFamily: 'DM Sans, sans-serif',
-              cursor: 'pointer',
-              transition: 'all 200ms',
-              textTransform: 'capitalize',
+              fontSize: 11, fontFamily: 'DM Sans, sans-serif',
+              cursor: 'pointer', transition: 'all 200ms', textTransform: 'capitalize',
             }}
           >
             {view}
@@ -467,19 +462,56 @@ export default function Forma3D() {
 
       {/* Float bar bottom */}
       <div style={{
-        position: 'absolute',
-        bottom: 20,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: 6,
-        background: 'var(--panel)',
-        border: '1px solid var(--bd)',
-        borderRadius: 12,
-        padding: '5px 8px',
-        zIndex: 20,
+        position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 6, alignItems: 'center',
+        background: 'var(--panel)', border: '1px solid var(--bd)',
+        borderRadius: 12, padding: '5px 8px', zIndex: 20,
         backdropFilter: 'blur(8px)',
       }}>
+        <button
+          onClick={() => useFormaStore.getState().undo()}
+          title="Undo (⌘Z)"
+          style={{ padding: '5px 10px', background: 'transparent', border: 'none', color: 'var(--t2)', fontSize: 14, cursor: 'pointer' }}
+        >↩</button>
+        <button
+          onClick={() => useFormaStore.getState().redo()}
+          title="Redo (⌘Y)"
+          style={{ padding: '5px 10px', background: 'transparent', border: 'none', color: 'var(--t2)', fontSize: 14, cursor: 'pointer' }}
+        >↪</button>
+        <div style={{ width: 1, height: 16, background: 'var(--bd2)' }} />
+        <button
+          onClick={() => {
+            const sel = useFormaStore.getState().selectedId
+            if (sel) useFormaStore.getState().duplicatePart(sel)
+          }}
+          title="Duplicate (D)"
+          style={{ padding: '5px 10px', background: 'transparent', border: 'none', color: 'var(--t2)', fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+        >Dup</button>
+        <button
+          onClick={() => {
+            const sel = useFormaStore.getState().selectedId
+            if (sel) useFormaStore.getState().removePart(sel)
+          }}
+          title="Delete (Del)"
+          style={{ padding: '5px 10px', background: 'transparent', border: 'none', color: 'var(--rd)', fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+        >Del</button>
+        <div style={{ width: 1, height: 16, background: 'var(--bd2)' }} />
+        <button
+          onClick={() => setAutoRotate(!autoRotate)}
+          title="Auto-rotate"
+          style={{
+            padding: '5px 10px',
+            background: autoRotate ? 'rgba(212,117,74,.1)' : 'transparent',
+            border: 'none', borderRadius: 8,
+            color: autoRotate ? 'var(--acc)' : 'var(--t2)',
+            fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+            display: 'flex', alignItems: 'center', gap: 5, transition: 'all 200ms',
+          }}
+        >
+          {autoRotate && <span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--gr)' }} />}
+          ⟳ Auto
+        </button>
+        <div style={{ width: 1, height: 16, background: 'var(--bd2)' }} />
         <button
           onClick={() => {
             const s = stateRef.current
@@ -495,56 +527,23 @@ export default function Forma3D() {
           }}
           title="Reset camera (R)"
           style={{ padding: '5px 10px', background: 'transparent', border: 'none', color: 'var(--t2)', fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
-        >
-          ↺ Reset
-        </button>
-
-        <div style={{ width: 1, background: 'var(--bd2)', margin: '2px 0' }} />
-
-        <button
-          onClick={() => setAutoRotate(!autoRotate)}
-          style={{
-            padding: '5px 10px',
-            background: autoRotate ? 'rgba(212,117,74,.1)' : 'transparent',
-            border: 'none',
-            borderRadius: 8,
-            color: autoRotate ? 'var(--acc)' : 'var(--t2)',
-            fontSize: 12, cursor: 'pointer',
-            fontFamily: 'DM Sans, sans-serif',
-            display: 'flex', alignItems: 'center', gap: 5,
-            transition: 'all 200ms',
-          }}
-          title="Auto-rotate (TikTok mode)"
-        >
-          {autoRotate && <span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--gr)' }} />}
-          ⟳ Auto
-        </button>
-
-        <div style={{ width: 1, background: 'var(--bd2)', margin: '2px 0' }} />
-
+        >↺ Reset</button>
+        <div style={{ width: 1, height: 16, background: 'var(--bd2)' }} />
         <button
           onClick={() => {
             if (!document.fullscreenElement) mountRef.current?.requestFullscreen()
             else document.exitFullscreen()
           }}
-          style={{ padding: '5px 10px', background: 'transparent', border: 'none', color: 'var(--t2)', fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
           title="Fullscreen (F)"
-        >
-          ⛶ Full
-        </button>
+          style={{ padding: '5px 10px', background: 'transparent', border: 'none', color: 'var(--t2)', fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+        >⛶ Full</button>
       </div>
 
       {/* Hints bottom left */}
       <div style={{
-        position: 'absolute',
-        bottom: 20,
-        left: 16,
-        zIndex: 20,
-        color: 'var(--t3)',
-        fontSize: 10,
-        fontFamily: 'DM Mono, monospace',
-        lineHeight: 1.8,
-        pointerEvents: 'none',
+        position: 'absolute', bottom: 20, left: 16, zIndex: 20,
+        color: 'var(--t3)', fontSize: 10, fontFamily: 'DM Mono, monospace',
+        lineHeight: 1.8, pointerEvents: 'none',
       }}>
         <div>⌘K search · D duplicate · Del delete</div>
         <div>Drag part · Scroll zoom · Drag empty orbit</div>
