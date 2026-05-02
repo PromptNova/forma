@@ -1,12 +1,29 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
+# Forma Backend — Python dependencies
+# Install: pip install -r requirements.txt
+
+# ── Web framework ─────────────────────────────────────────────
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# ── Pydantic (FastAPI depends on v2) ─────────────────────────
+pydantic==2.5.0
 pydantic-settings==2.1.0
-supabase==2.3.0
+
+# ── Supabase ──────────────────────────────────────────────────
+supabase==2.1.0
+httpx==0.25.2
+
+# ── Auth / JWT ───────────────────────────────────────────────
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
+
+# ── Environment ───────────────────────────────────────────────
+python-dotenv==1.0.0
+
+# ── Redis (optional cache — graceful fallback if unavailable) ─
 redis==5.0.1
-httpx==0.26.0
-pillow==10.2.0
+
+# ── Export ───────────────────────────────────────────────────
 reportlab==4.0.8
+pillow==10.2.0
