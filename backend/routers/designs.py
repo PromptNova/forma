@@ -1,194 +1,315 @@
 """
-Designs router — CRUD for furniture designs
+Designs router — Full CRUD for furniture designs
+GET    /designs             - list user designs (skip/limit)
+POST   /designs             - create new design
+GET    /designs/{id}        - get single design
+PUT    /designs/{id}        - update design
+DELETE /designs/{id}        - delete design
+POST   /designs/{id}/share  - make public, return share URL
+GET    /designs/shared/{token} - get public design by share token
 """
-from fastapi import APIRouter, HTTPException, Header
-from typing import List, Optional
-import uuid
+import logging
 import secrets
-from models.design import DesignCreate, DesignResponse
+from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Depends, Query, Response
+from pydantic import BaseModel
+
+from routers.auth import get_current_user, get_current_user_optional
 from services.supabase import get_supabase
 from services.physics import validate_design
 
+logger = logging.getLogger("forma.designs")
 router = APIRouter()
 
 
-def get_user_id(authorization: str) -> str:
-    """Extract user_id from JWT token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing authorization")
-    token = authorization.replace("Bearer ", "")
-    supabase = get_supabase()
-    try:
-        user = supabase.auth.get_user(token)
-        if not user.user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return user.user.id
-    except:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+# ── Request/Response models ───────────────────────────────────
+class PartIn(BaseModel):
+    id: str
+    type: str
+    x: float
+    y: float
+    z: float
+    rotation_y: float = 0.0
+    color: Optional[str] = None
 
 
-@router.get("/", response_model=List[DesignResponse])
+class DesignIn(BaseModel):
+    name: str = "Ontwerp"
+    parts: List[PartIn] = []
+    theme: str = "dark"
+
+
+class DesignResponse(BaseModel):
+    id: str
+    user_id: str
+    name: str
+    parts: list
+    theme: str
+    is_stable: Optional[bool] = None
+    stability_score: Optional[int] = None
+    stability_grade: Optional[str] = None
+    total_weight_kg: Optional[float] = None
+    total_cost_eur: Optional[float] = None
+    height_cm: Optional[int] = None
+    width_cm: Optional[int] = None
+    is_public: bool = False
+    share_token: Optional[str] = None
+    view_count: int = 0
+    created_at: str
+    updated_at: str
+
+
+# ── Helpers ───────────────────────────────────────────────────
+def _compute_stats(parts_dicts: list) -> dict:
+    """Compute weight, cost, height from parts list."""
+    from services.physics import PARTS as PART_DEFS
+    total_weight = 0.0
+    total_cost = 0.0
+    max_y = 0.0
+
+    # Part prices (mirrors parts.ts)
+    PRICES = {
+        "seat": 12, "tabletop": 45, "shelf": 18,
+        "leg-short": 8, "leg-long": 12, "crossbar": 9,
+        "backrest": 22, "armrest": 15, "panel": 35,
+        "prod-oak-top": 220, "prod-walnut-top": 310,
+        "prod-pine-desk": 95, "prod-bamboo-shelf": 24,
+        "prod-dining-seat": 12, "prod-cushion": 18,
+        "prod-hairpin": 14, "prod-scandi-leg": 9,
+        "prod-u-leg": 55, "prod-tall-panel": 45,
+        "prod-door": 68,
+    }
+
+    for p in parts_dicts:
+        ptype = p.get("type", "")
+        defn = PART_DEFS.get(ptype, {})
+        kg = defn.get("kg", 0)
+        h = defn.get("h", 0)
+        total_weight += kg
+        total_cost += PRICES.get(ptype, 0)
+        top_y = p.get("y", 0) + h / 2
+        if top_y > max_y:
+            max_y = top_y
+
+    return {
+        "total_weight_kg": round(total_weight, 2),
+        "total_cost_eur": round(total_cost, 2),
+        "height_cm": round(max_y * 100),
+        "width_cm": 0,
+    }
+
+
+# ── Endpoints ─────────────────────────────────────────────────
+@router.get("/", response_class=Response)
 async def list_designs(
-    page: int = 1,
-    limit: int = 20,
-    authorization: str = Header(None)
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
 ):
-    """List all designs for the current user."""
-    user_id = get_user_id(authorization)
+    """List designs for current user, paginated."""
     supabase = get_supabase()
-    
-    offset = (page - 1) * limit
-    resp = supabase.table("designs") \
-        .select("*") \
-        .eq("user_id", user_id) \
-        .order("created_at", desc=True) \
-        .range(offset, offset + limit - 1) \
+    resp = (
+        supabase.table("designs")
+        .select("*")
+        .eq("user_id", current_user["id"])
+        .order("updated_at", desc=True)
+        .range(skip, skip + limit - 1)
         .execute()
-    
-    return resp.data or []
+    )
+    # Count total for X-Total-Count header
+    count_resp = (
+        supabase.table("designs")
+        .select("id", count="exact")
+        .eq("user_id", current_user["id"])
+        .execute()
+    )
+    total = count_resp.count or 0
+    import json
+    return Response(
+        content=json.dumps(resp.data or []),
+        media_type="application/json",
+        headers={"X-Total-Count": str(total)},
+    )
 
 
-@router.post("/", response_model=DesignResponse)
+@router.post("/", status_code=201)
 async def create_design(
-    body: DesignCreate,
-    authorization: str = Header(None)
+    body: DesignIn,
+    current_user: dict = Depends(get_current_user),
 ):
-    """Create a new design."""
-    user_id = get_user_id(authorization)
+    """Create a new design with physics validation."""
     supabase = get_supabase()
-    
-    # Run physics validation
-    physics = validate_design([p.dict() for p in body.parts])
-    
+    parts_dicts = [p.model_dump() for p in body.parts]
+
+    # Server-side physics validation
+    physics = validate_design(parts_dicts)
+
+    # Compute stats
+    stats = _compute_stats(parts_dicts)
+
     design_data = {
-        "user_id": user_id,
+        "user_id": current_user["id"],
         "name": body.name,
-        "parts": [p.dict() for p in body.parts],
+        "parts": parts_dicts,
+        "theme": body.theme,
         "is_stable": physics["stable"],
         "stability_score": physics["score"],
-        "total_weight": body.total_weight,
-        "total_cost": body.total_cost,
-        "height_cm": body.height_cm,
+        "stability_grade": physics.get("grade", "D"),
+        **stats,
         "is_public": False,
     }
-    
+
     resp = supabase.table("designs").insert(design_data).execute()
-    
     if not resp.data:
         raise HTTPException(status_code=500, detail="Failed to save design")
-    
-    # Update profile designs count
-    supabase.rpc("increment_designs_count", {"user_id_input": user_id}).execute()
-    
     return resp.data[0]
+
+
+@router.get("/shared/{token}")
+async def get_shared_design(token: str):
+    """Get a publicly shared design by share token. No auth required."""
+    supabase = get_supabase()
+    resp = (
+        supabase.table("designs")
+        .select("*")
+        .eq("share_token", token)
+        .eq("is_public", True)
+        .single()
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Design not found")
+    # Increment view count in background
+    try:
+        supabase.rpc("increment_view_count", {"design_id": resp.data["id"]}).execute()
+    except Exception:
+        pass
+    return resp.data
 
 
 @router.get("/{design_id}")
 async def get_design(
     design_id: str,
-    authorization: str = Header(None)
+    current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
-    """Get a single design."""
+    """Get a single design. Public designs accessible without auth."""
     supabase = get_supabase()
-    resp = supabase.table("designs").select("*").eq("id", design_id).single().execute()
-    
+    resp = (
+        supabase.table("designs")
+        .select("*")
+        .eq("id", design_id)
+        .single()
+        .execute()
+    )
     if not resp.data:
         raise HTTPException(status_code=404, detail="Design not found")
-    
+
     design = resp.data
-    
-    # Check access (public designs are visible to all)
-    if not design["is_public"] and authorization:
-        user_id = get_user_id(authorization)
-        if design["user_id"] != user_id:
+    # Access check
+    if not design["is_public"]:
+        if not current_user or design["user_id"] != current_user["id"]:
             raise HTTPException(status_code=403, detail="Access denied")
-    elif not design["is_public"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
+
     return design
 
 
 @router.put("/{design_id}")
 async def update_design(
     design_id: str,
-    body: DesignCreate,
-    authorization: str = Header(None)
+    body: DesignIn,
+    current_user: dict = Depends(get_current_user),
 ):
-    """Update a design."""
-    user_id = get_user_id(authorization)
+    """Update a design. User must own it."""
     supabase = get_supabase()
-    
+
     # Verify ownership
-    existing = supabase.table("designs").select("user_id").eq("id", design_id).single().execute()
-    if not existing.data or existing.data["user_id"] != user_id:
+    existing = (
+        supabase.table("designs")
+        .select("user_id")
+        .eq("id", design_id)
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Design not found")
+    if existing.data["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    
-    physics = validate_design([p.dict() for p in body.parts])
-    
+
+    parts_dicts = [p.model_dump() for p in body.parts]
+    physics = validate_design(parts_dicts)
+    stats = _compute_stats(parts_dicts)
+
     updates = {
         "name": body.name,
-        "parts": [p.dict() for p in body.parts],
+        "parts": parts_dicts,
+        "theme": body.theme,
         "is_stable": physics["stable"],
         "stability_score": physics["score"],
-        "total_weight": body.total_weight,
-        "total_cost": body.total_cost,
-        "height_cm": body.height_cm,
+        "stability_grade": physics.get("grade", "D"),
+        **stats,
     }
-    
+
     resp = supabase.table("designs").update(updates).eq("id", design_id).execute()
+    if not resp.data:
+        raise HTTPException(status_code=500, detail="Update failed")
     return resp.data[0]
 
 
-@router.delete("/{design_id}")
+@router.delete("/{design_id}", status_code=204)
 async def delete_design(
     design_id: str,
-    authorization: str = Header(None)
+    current_user: dict = Depends(get_current_user),
 ):
-    """Delete a design."""
-    user_id = get_user_id(authorization)
+    """Delete a design. User must own it."""
     supabase = get_supabase()
-    
-    existing = supabase.table("designs").select("user_id").eq("id", design_id).single().execute()
-    if not existing.data or existing.data["user_id"] != user_id:
+
+    existing = (
+        supabase.table("designs")
+        .select("user_id")
+        .eq("id", design_id)
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Design not found")
+    if existing.data["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     supabase.table("designs").delete().eq("id", design_id).execute()
-    return {"success": True}
+    return None
 
 
 @router.post("/{design_id}/share")
 async def share_design(
     design_id: str,
-    authorization: str = Header(None)
+    current_user: dict = Depends(get_current_user),
 ):
-    """Generate a public share link."""
-    user_id = get_user_id(authorization)
+    """Make a design public and return share URL + token."""
     supabase = get_supabase()
-    
-    existing = supabase.table("designs").select("user_id,share_token").eq("id", design_id).single().execute()
-    if not existing.data or existing.data["user_id"] != user_id:
+
+    existing = (
+        supabase.table("designs")
+        .select("user_id, share_token")
+        .eq("id", design_id)
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Design not found")
+    if existing.data["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    
-    token = existing.data.get("share_token") or secrets.token_urlsafe(16)
-    
+
+    # Use existing token or generate new one
+    token = existing.data.get("share_token") or secrets.token_hex(16)
+
     supabase.table("designs").update({
         "is_public": True,
         "share_token": token,
     }).eq("id", design_id).execute()
-    
+
     return {
         "share_token": token,
-        "share_url": f"https://forma.app/share/{token}",
+        "share_url": f"https://forma-71ny.vercel.app/share/{token}",
+        "is_public": True,
     }
-
-
-@router.get("/shared/{token}")
-async def get_shared_design(token: str):
-    """Get a publicly shared design by token."""
-    supabase = get_supabase()
-    resp = supabase.table("designs").select("*").eq("share_token", token).single().execute()
-    
-    if not resp.data:
-        raise HTTPException(status_code=404, detail="Design not found")
-    
-    return resp.data
