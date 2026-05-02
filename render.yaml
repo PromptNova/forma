@@ -1,21 +1,28 @@
+# Render.com deployment configuration
+# Connect this repo at https://dashboard.render.com/new/web
+
 services:
   - type: web
     name: forma-api
-    env: python
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2
+    healthCheckPath: /health
+    autoDeploy: true
+    plan: starter        # upgrade to standard for production load
     envVars:
       - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
+        sync: false      # set in Render dashboard
+      - key: SUPABASE_KEY
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
       - key: JWT_SECRET
-        generateValue: true
+        generateValue: true   # auto-generate 256-bit secret
       - key: REDIS_URL
-        sync: false
+        sync: false      # add Render Redis add-on or Upstash URL
       - key: CORS_ORIGINS
-        value: https://forma-71ny.vercel.app
-    healthCheckPath: /health
-    autoDeploy: true
+        value: https://forma-71ny.vercel.app,https://forma.app
+      - key: ENV
+        value: production
