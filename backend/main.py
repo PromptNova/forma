@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 load_dotenv()
 
-from routers import auth, designs, physics, export, embed, analytics
+from routers import auth, designs, physics, export, embed, analytics, photo_to_3d
 from middleware.ratelimit import RateLimitMiddleware
 
 # ── Logging ───────────────────────────────────────────────────
@@ -32,6 +32,10 @@ async def lifespan(app: FastAPI):
     logger.info("Forma API starting up...")
     # Verify required env vars
     required = ["SUPABASE_URL", "SUPABASE_KEY"]
+    optional = ["FAL_KEY", "SUPABASE_SERVICE_KEY"]
+    missing_optional = [k for k in optional if not os.getenv(k)]
+    if missing_optional:
+        logger.info(f"Optional env vars not set: {missing_optional} — AI features may be limited")
     missing = [k for k in required if not os.getenv(k)]
     if missing:
         logger.warning(f"Missing env vars: {missing} — some features will be disabled")
@@ -112,6 +116,7 @@ app.include_router(physics.router, prefix="/physics", tags=["physics"])
 app.include_router(export.router, prefix="/export", tags=["export"])
 app.include_router(embed.router, prefix="/embed", tags=["embed"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+app.include_router(photo_to_3d.router, prefix="/ai", tags=["ai"])
 
 
 # ── Root & Health ─────────────────────────────────────────────
