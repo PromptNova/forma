@@ -4,19 +4,24 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFormaStore } from '../lib/store'
 import { PARTS, PART_CATEGORIES, PRESETS, PlacedPart, PresetName } from '../lib/parts'
+import PhotoTo3D from './PhotoTo3D'
 
 const PRESET_ICONS: Record<string, string> = {
   chair: '🪑', table: '🪵', stool: '◎', bookshelf: '📚', desk: '💻', bench: '▬',
 }
 
 export default function Sidebar() {
-  const { addPart, loadPreset, sidebarTab, setSidebarTab, parts } = useFormaStore()
+  const { addPart, loadPreset, sidebarTab, setSidebarTab, parts, customParts, showPhotoTo3D, setShowPhotoTo3D, loadCustomParts } = useFormaStore()
+  
+  // Load custom parts on mount
+  useState(() => { loadCustomParts() })
   const [search, setSearch] = useState('')
 
   const tabs = [
     { key: 'parts', label: 'Parts' },
     { key: 'real', label: 'Products' },
     { key: 'presets', label: 'Presets' },
+    { key: 'library', label: 'Mijn Library' },
   ] as const
 
   const allParts = Object.values(PARTS)
@@ -25,6 +30,7 @@ export default function Sidebar() {
     const matchSearch = search === '' || p.label.toLowerCase().includes(search.toLowerCase())
     if (sidebarTab === 'parts') return matchSearch && !p.id.startsWith('prod-')
     if (sidebarTab === 'real') return matchSearch && p.id.startsWith('prod-')
+    if (sidebarTab === 'library') return false  // handled separately
     return false
   })
 
@@ -107,7 +113,58 @@ export default function Sidebar() {
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
         <AnimatePresence mode="wait">
-          {sidebarTab === 'presets' ? (
+          {sidebarTab === 'library' ? (
+            <motion.div key="library" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div style={{ padding: '6px 4px', color: 'var(--t3)', fontSize: 10, fontFamily: 'DM Mono, monospace', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+                Mijn Library ({customParts.length})
+              </div>
+              {customParts.length === 0 ? (
+                <div style={{ padding: '20px 12px', textAlign: 'center', color: 'var(--t3)', fontSize: 12, fontFamily: 'DM Sans, sans-serif', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>📸</div>
+                  Nog geen AI-geïmporteerde onderdelen.<br />
+                  <span style={{ color: 'var(--acc)' }}>Klik op "Foto → 3D Model"</span><br />
+                  om je eerste onderdeel te importeren.
+                </div>
+              ) : (
+                customParts.map(part => (
+                  <motion.button
+                    key={part.id}
+                    whileHover={{ x: 2 }}
+                    onClick={() => {
+                      const newPart: PlacedPart = {
+                        id: '',
+                        type: '__custom__' + part.id,
+                        x: (Math.random() - 0.5) * 0.4,
+                        y: part.heightM / 2 + 0.01,
+                        z: (Math.random() - 0.5) * 0.4,
+                        rotationY: 0,
+                      }
+                      addPart(newPart)
+                    }}
+                    style={{
+                      width: '100%', padding: '8px 10px', marginBottom: 2,
+                      background: 'transparent', border: '1px solid transparent', borderRadius: 6,
+                      color: 'var(--t)', fontSize: 12, fontFamily: 'DM Sans, sans-serif',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'space-between', transition: 'all 150ms',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--p2)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--bd)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {part.previewUrl ? (
+                        <img src={part.previewUrl} alt="" style={{ width: 24, height: 24, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--bd)' }} />
+                      ) : (
+                        <span style={{ fontSize: 14 }}>🧊</span>
+                      )}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>{part.name}</span>
+                    </div>
+                    <span style={{ fontSize: 9, padding: '1px 5px', background: 'rgba(212,117,74,.15)', color: 'var(--acc)', borderRadius: 8, fontFamily: 'DM Mono, monospace', flexShrink: 0 }}>AI</span>
+                  </motion.button>
+                ))
+              )}
+            </motion.div>
+          ) : sidebarTab === 'presets' ? (
             <motion.div key="presets" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div style={{ padding: '6px 4px', color: 'var(--t3)', fontSize: 10, fontFamily: 'DM Mono, monospace', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
                 Presets
