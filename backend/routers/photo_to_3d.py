@@ -17,7 +17,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from services.supabase import get_supabase_client
+from services.supabase import get_supabase as get_supabase_client
 from routers.auth import get_current_user
 
 logger = logging.getLogger("forma.photo_to_3d")
