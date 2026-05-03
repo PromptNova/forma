@@ -189,3 +189,22 @@ export const PRESETS: Record<PresetName, PlacedPart[]> = {
     { id: 'p4', type: 'prod-scandi-leg', x:  0.70, y: 0.215, z:  0.30, rotationY: 0 },
   ],
 }
+
+
+// ── Custom (AI-imported) parts ───────────────────────────────
+
+export type CustomPartKind = PartKind
+
+export interface CustomPart {
+  id: string
+  name: string
+  kind: CustomPartKind
+  modelUrl: string      // .glb URL from Supabase Storage
+  previewUrl: string    // preview image URL
+  widthM: number        // estimated_width_cm / 100
+  heightM: number       // estimated_height_cm / 100
+  depthM: number        // cubic estimate: same as widthM
+  priceEur?: number
+  weightKg?: number
+  source: 'ai_converted' | 'manual'
+}
