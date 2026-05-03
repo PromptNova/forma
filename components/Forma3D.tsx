@@ -1,8 +1,10 @@
 'use client'
 import { useEffect, useRef, useCallback } from 'react'
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
 import { useFormaStore } from '../lib/store'
 import { PARTS } from '../lib/parts'
+import type { CustomPart } from '../lib/parts'
 import PhysicsHUD from './PhysicsHUD'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -19,6 +21,38 @@ function snapToGrid(v: number, snap: boolean) {
 
 // Expose renderer for export
 let _renderer: THREE.WebGLRenderer | null = null
+
+// ── GLB Loader ─────────────────────────────────────────────
+async function loadGLBModel(url: string): Promise<THREE.Object3D> {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader()
+    loader.load(
+      url,
+      (gltf) => {
+        const model = gltf.scene
+        // Normalize scale so longest axis = 1 meter
+        const box = new THREE.Box3().setFromObject(model)
+        const size = box.getSize(new THREE.Vector3())
+        const maxDim = Math.max(size.x, size.y, size.z)
+        if (maxDim > 0) model.scale.multiplyScalar(1 / maxDim)
+        // Shadows
+        model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.castShadow = true
+            child.receiveShadow = true
+          }
+        })
+        resolve(model)
+      },
+      undefined,
+      reject
+    )
+  })
+}
+
+// Cache for loaded GLB models (url → Object3D)
+const _glbCache = new Map<string, THREE.Object3D>()
+
 export function getRenderer() { return _renderer }
 
 export default function Forma3D() {
@@ -153,6 +187,66 @@ export default function Forma3D() {
 
       // Add/update parts
       storeParts.forEach(part => {
+        // Custom AI-imported GLB part
+        if (part.type.startsWith('__custom__')) {
+          const customPartId = part.type.replace('__custom__', '')
+          const customPart = st.customParts?.find((cp: CustomPart) => cp.id === customPartId)
+          if (!customPart) return
+          let mesh = meshes.get(part.id)
+          if (!mesh) {
+            // Create placeholder box while loading
+            const w = customPart.widthM || 0.04
+            const h = customPart.heightM || 0.71
+            const d = customPart.depthM || 0.04
+            const geo = new THREE.BoxGeometry(w, h, d)
+            const mat = new THREE.MeshStandardMaterial({ color: 0xd4754a, roughness: 0.7, metalness: 0.1, transparent: true, opacity: 0.6 })
+            mesh = new THREE.Mesh(geo, mat)
+            mesh.castShadow = true
+            mesh.receiveShadow = true
+            mesh.name = part.id
+            mesh.userData = { partId: part.id, partType: part.type }
+            sc.scene.add(mesh)
+            meshes.set(part.id, mesh)
+            // Load GLB asynchronously and replace placeholder
+            if (customPart.modelUrl) {
+              const cachedModel = _glbCache.get(customPart.modelUrl)
+              if (cachedModel) {
+                const clone = cachedModel.clone()
+                clone.name = part.id
+                clone.userData = { partId: part.id, partType: part.type }
+                sc.scene.remove(mesh)
+                sc.scene.add(clone)
+                meshes.set(part.id, clone as unknown as THREE.Mesh)
+              } else {
+                loadGLBModel(customPart.modelUrl).then((model) => {
+                  _glbCache.set(customPart.modelUrl, model)
+                  // Scale to match given dimensions
+                  const w2 = customPart.widthM || 0.04
+                  const h2 = customPart.heightM || 0.71
+                  const box2 = new THREE.Box3().setFromObject(model)
+                  const sz = box2.getSize(new THREE.Vector3())
+                  const sx = sz.x > 0 ? w2 / sz.x : 1
+                  const sy = sz.y > 0 ? h2 / sz.y : 1
+                  model.scale.set(sx, sy, sx)
+                  model.name = part.id
+                  model.userData = { partId: part.id, partType: part.type }
+                  const oldMesh = meshes.get(part.id)
+                  if (oldMesh) sc.scene.remove(oldMesh)
+                  sc.scene.add(model)
+                  meshes.set(part.id, model as unknown as THREE.Mesh)
+                }).catch(err => console.warn('GLB load failed:', err))
+              }
+            }
+          }
+          // Update position
+          const currentMesh = meshes.get(part.id)
+          if (currentMesh) {
+            currentMesh.position.set(part.x, part.y, part.z)
+            currentMesh.rotation.y = part.rotationY || 0
+          }
+          return
+        }
+
         const def = PARTS[part.type]
         if (!def) return
         let mesh = meshes.get(part.id)
