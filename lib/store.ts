@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { PlacedPart, PRESETS, PresetName } from './parts'
+import { PlacedPart, PRESETS, PresetName, CustomPart } from './parts'
 import { validatePhysics, PhysicsResult } from './physics'
 import {
   saveDesignToSupabase,
@@ -47,6 +47,16 @@ interface FormaState {
   cloudError: string | null
   currentDesignId: string | null  // ID of the design currently being edited
 
+  // ── Custom parts (AI imported) ─────────────────────────
+  customParts: CustomPart[]
+  showPhotoTo3D: boolean
+
+  // ── Custom parts actions ────────────────────────────────
+  addCustomPart: (part: CustomPart) => void
+  removeCustomPart: (id: string) => void
+  loadCustomParts: () => Promise<void>
+  setShowPhotoTo3D: (v: boolean) => void
+
   // ── Design actions ─────────────────────────────────────────
   addPart: (part: PlacedPart) => void
   removePart: (id: string) => void
@@ -55,6 +65,42 @@ interface FormaState {
   duplicatePart: (id: string) => void
   clearAll: () => void
   loadPreset: (name: PresetName) => void
+
+  // ── Custom parts actions ────────────────────────────────
+  addCustomPart: (part) => set((state) => ({
+    customParts: [part, ...state.customParts.filter(p => p.id !== part.id)],
+  })),
+  removeCustomPart: (id) => set((state) => ({
+    customParts: state.customParts.filter(p => p.id !== id),
+  })),
+  loadCustomParts: async () => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forma-api.onrender.com'
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('forma_token') || '') : ''
+      const resp = await fetch(`${API_URL}/ai/conversions`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (!resp.ok) return
+      const data = await resp.json()
+      const parts: CustomPart[] = data
+        .filter((c: any) => c.status === 'completed' && c.model_url)
+        .map((c: any) => ({
+          id: c.id,
+          name: c.part_name,
+          kind: c.part_kind,
+          modelUrl: c.model_url,
+          previewUrl: c.preview_url || c.original_image_url || '',
+          widthM: 0.04,
+          heightM: 0.71,
+          depthM: 0.04,
+          source: 'ai_converted' as const,
+        }))
+      set({ customParts: parts })
+    } catch (e) {
+      // fail silently
+    }
+  },
+  setShowPhotoTo3D: (showPhotoTo3D) => set({ showPhotoTo3D }),
 
   // ── UI actions ─────────────────────────────────────────────
   setTheme: (theme: Theme) => void
@@ -114,6 +160,8 @@ export const useFormaStore = create<FormaState>((set, get) => ({
   cloudLoading: false,
   cloudError: null,
   currentDesignId: null,
+  customParts: [],
+  showPhotoTo3D: false,
 
   // ── Design actions ─────────────────────────────────────────
   addPart: (part) => set((state) => {
