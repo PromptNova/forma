@@ -12,18 +12,18 @@ type Step = 1 | 2 | 3
 type PartKindOption = { value: string; label: string }
 
 const PART_KIND_OPTIONS: PartKindOption[] = [
-  { value: 'surface', label: 'Tafelblad / Zitting' },
-  { value: 'leg',     label: 'Poot' },
-  { value: 'back',    label: 'Rugleuning' },
-  { value: 'panel',   label: 'Zijpaneel' },
-  { value: 'support', label: 'Steun / Dwarsverbinding' },
+  { value: 'surface', label: 'Tabletop / Seat' },
+  { value: 'leg',     label: 'Leg' },
+  { value: 'back',    label: 'Backrest' },
+  { value: 'panel',   label: 'Side Panel' },
+  { value: 'support', label: 'Support / Crossbar' },
 ]
 
 const PROGRESS_STEPS = [
-  { label: 'Achtergrond verwijderen',  icon: '✂️', durationMs: 8000  },
-  { label: '3D reconstrueren',         icon: '🧊', durationMs: 12000 },
-  { label: 'Texturen genereren',       icon: '🎨', durationMs: 8000  },
-  { label: 'Model optimaliseren',      icon: '⚡', durationMs: 4000  },
+  { label: 'Removing background',   icon: '✂️', durationMs: 8000  },
+  { label: 'Reconstructing 3D',      icon: '🧊', durationMs: 12000 },
+  { label: 'Generating textures',    icon: '🎨', durationMs: 8000  },
+  { label: 'Optimizing model',       icon: '⚡', durationMs: 4000  },
 ]
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://forma-api.onrender.com'
@@ -156,11 +156,11 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
   // ── File handling ────────────────────────────────────────
   const handleFile = useCallback((f: File) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) {
-      setError('Gebruik JPG, PNG of WEBP.')
+      setError('Please use JPG, PNG or WEBP.')
       return
     }
     if (f.size > 10 * 1024 * 1024) {
-      setError('Bestand te groot. Max 10MB.')
+      setError('File too large. Max 10MB.')
       return
     }
     setError(null)
@@ -194,7 +194,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
   // ── Submit ───────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!file || !partName || !heightCm || !widthCm) {
-      setError('Vul alle velden in.')
+      setError('Please fill in all fields.')
       return
     }
     setError(null)
@@ -219,9 +219,9 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
 
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}))
-        const msg = data?.detail?.message || data?.detail || `Fout ${resp.status}`
+        const msg = data?.detail?.message || data?.detail || `Error ${resp.status}`
         if (resp.status === 429) {
-          throw new Error(`Quotum bereikt. ${msg}`)
+          throw new Error(`Quota reached. ${msg}`)
         }
         throw new Error(msg)
       }
@@ -235,7 +235,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
       })
       setProgressStep(PROGRESS_STEPS.length - 1)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Onbekende fout')
+      setError(err instanceof Error ? err.message : 'Unknown error')
       setStep(2)
     } finally {
       setLoading(false)
@@ -328,7 +328,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 18 }}>📸</span>
               <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 16, color: 'var(--t)' }}>
-                Foto → 3D Model
+                Photo → 3D Model
               </span>
               <span style={{
                 fontSize: 10, padding: '2px 7px',
@@ -340,7 +340,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
               }}>AI</span>
             </div>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--t3)', fontFamily: 'DM Sans, sans-serif' }}>
-              Upload een productfoto — klaar in ~30 seconden
+              Upload a product photo — ready in ~30 seconds
             </p>
           </div>
           <button
@@ -368,7 +368,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                 color: step === n ? 'var(--t)' : 'var(--t3)',
                 transition: 'all 300ms',
               }}>
-                {n === 1 ? 'Foto uploaden' : n === 2 ? 'Details invullen' : 'Resultaat'}
+                {n === 1 ? 'Upload photo' : n === 2 ? 'Fill in details' : 'Result'}
               </span>
               {n < 3 && <div style={{ flex: 1, height: 1, background: step > n ? 'var(--acc)' : 'var(--bd)', opacity: .5 }} />}
             </div>
@@ -424,7 +424,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                         <button
                           onClick={e => { e.stopPropagation(); setFile(null); setPreview('') }}
                           style={{ marginTop: 8, background: 'none', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--t3)', fontSize: 11, padding: '4px 10px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
-                        >Andere foto</button>
+                        >Different photo</button>
                       </div>
                     </>
                   ) : (
@@ -432,10 +432,10 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                       <div style={{ fontSize: 40 }}>🪑</div>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--t)', fontFamily: 'DM Sans, sans-serif' }}>
-                          Sleep een productfoto hierheen
+                          Drop a product photo here
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 4, fontFamily: 'DM Sans, sans-serif' }}>
-                          of klik om te selecteren
+                          or click to select
                         </div>
                       </div>
                       <div style={{
@@ -443,7 +443,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                         background: 'var(--p2)', borderRadius: 6, padding: '6px 12px', textAlign: 'center', lineHeight: 1.6,
                       }}>
                         JPG · PNG · WEBP · max 10MB<br />
-                        ✓ Witte achtergrond · ✓ Goede belichting · ✓ Volledig object zichtbaar
+                        ✓ White background · ✓ Good lighting · ✓ Full object visible
                       </div>
                     </>
                   )}
@@ -493,18 +493,18 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {/* Part name */}
                     <div>
-                      <label style={labelStyle}>Onderdeel naam</label>
+                      <label style={labelStyle}>Part name</label>
                       <input
                         value={partName}
                         onChange={e => setPartName(e.target.value)}
-                        placeholder="bijv. Hairpin poot chrome"
+                        placeholder="e.g. Hairpin leg chrome"
                         style={inputStyle}
                       />
                     </div>
 
                     {/* Part type */}
                     <div>
-                      <label style={labelStyle}>Type onderdeel</label>
+                      <label style={labelStyle}>Part type</label>
                       <select
                         value={partKind}
                         onChange={e => setPartKind(e.target.value)}
@@ -519,7 +519,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                     {/* Dimensions */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div>
-                        <label style={labelStyle}>Hoogte (cm)</label>
+                        <label style={labelStyle}>Height (cm)</label>
                         <input
                           type="number" min="1" max="500"
                           value={heightCm}
@@ -529,7 +529,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                         />
                       </div>
                       <div>
-                        <label style={labelStyle}>Breedte (cm)</label>
+                        <label style={labelStyle}>Width (cm)</label>
                         <input
                           type="number" min="1" max="500"
                           value={widthCm}
@@ -552,7 +552,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                   <button
                     onClick={() => setStep(1)}
                     style={{ background: 'none', border: 'none', color: 'var(--t3)', fontSize: 13, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
-                  >← Terug</button>
+                  >← Back</button>
 
                   <motion.button
                     whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
@@ -569,7 +569,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                       display: 'flex', alignItems: 'center', gap: 8,
                     }}
                   >
-                    <span>🚀</span> Genereer 3D model →
+                    <span>🚀</span> Generate 3D model →
                   </motion.button>
                 </div>
               </motion.div>
@@ -585,10 +585,10 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                   <div style={{ padding: '24px 0' }}>
                     <div style={{ textAlign: 'center', marginBottom: 28 }}>
                       <div style={{ fontSize: 13, color: 'var(--t)', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>
-                        AI verwerkt uw foto…
+                        AI is processing your photo…
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'DM Mono, monospace', marginTop: 4 }}>
-                        ~30 seconden
+                        ~30 seconds
                       </div>
                     </div>
 
@@ -635,7 +635,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                   <div>
                     <div style={{ textAlign: 'center', marginBottom: 16 }}>
                       <div style={{ fontSize: 13, fontFamily: 'DM Sans, sans-serif', color: 'var(--gr)', fontWeight: 600 }}>
-                        ✅ 3D model succesvol aangemaakt!
+                        ✅ 3D model created successfully!
                       </div>
                     </div>
 
@@ -662,7 +662,7 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                           border: '1px solid var(--acc)', borderRadius: 8, color: '#fff',
                           fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
                         }}
-                      >📚 Voeg toe aan mijn library</motion.button>
+                      >📚 Add to my library</motion.button>
                       <motion.button
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                         onClick={() => { setResult(null); setStep(1); setFile(null); setPreview(''); setPartName(''); setHeightCm(''); setWidthCm('') }}
@@ -671,20 +671,20 @@ export default function PhotoTo3D({ onClose }: PhotoTo3DProps) {
                           border: '1px solid var(--bd)', borderRadius: 8, color: 'var(--t2)',
                           fontSize: 13, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
                         }}
-                      >↺ Opnieuw</motion.button>
+                      >↺ Try again</motion.button>
                     </div>
                   </div>
                 ) : (
                   /* Error fallback */
                   <div style={{ padding: '24px 0', textAlign: 'center' }}>
                     <div style={{ fontSize: 13, color: '#e05252', fontFamily: 'DM Sans, sans-serif', marginBottom: 16 }}>
-                      {error || 'Er is iets misgegaan'}
+                      {error || 'Something went wrong'}
                     </div>
                     <motion.button
                       whileTap={{ scale: 0.98 }}
                       onClick={() => { setError(null); setStep(2) }}
                       style={{ padding: '10px 20px', background: 'var(--p2)', border: '1px solid var(--bd)', borderRadius: 8, color: 'var(--t)', fontSize: 13, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
-                    >← Terug naar details</motion.button>
+                    >← Back to details</motion.button>
                   </div>
                 )}
               </motion.div>
