@@ -21,7 +21,7 @@ export default function Sidebar() {
     { key: 'parts', label: 'Parts' },
     { key: 'real', label: 'Products' },
     { key: 'presets', label: 'Presets' },
-    { key: 'library', label: 'Mijn Library' },
+    { key: 'library', label: 'My Library' },
   ] as const
 
   const allParts = Object.values(PARTS)
@@ -116,14 +116,14 @@ export default function Sidebar() {
           {sidebarTab === 'library' ? (
             <motion.div key="library" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div style={{ padding: '6px 4px', color: 'var(--t3)', fontSize: 10, fontFamily: 'DM Mono, monospace', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
-                Mijn Library ({customParts.length})
+                My Library ({customParts.length})
               </div>
               {customParts.length === 0 ? (
                 <div style={{ padding: '20px 12px', textAlign: 'center', color: 'var(--t3)', fontSize: 12, fontFamily: 'DM Sans, sans-serif', lineHeight: 1.5 }}>
                   <div style={{ fontSize: 24, marginBottom: 8 }}>📸</div>
-                  Nog geen AI-geïmporteerde onderdelen.<br />
-                  <span style={{ color: 'var(--acc)' }}>Klik op "Foto → 3D Model"</span><br />
-                  om je eerste onderdeel te importeren.
+                  No AI-imported parts yet.<br />
+                  <span style={{ color: 'var(--acc)' }}>Click "Photo → 3D Model"</span><br />
+                  to import your first part.
                 </div>
               ) : (
                 customParts.map(part => (
