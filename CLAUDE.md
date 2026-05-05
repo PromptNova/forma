@@ -152,3 +152,51 @@ B2B SaaS for furniture manufacturers and interior designers.
 ## Deployment
 - Frontend auto-deploys to Vercel on push to main
 - Backend deploys to Render via render.yaml
+
+
+## Stability Certificate Feature
+
+### Overview
+Forma's viral marketing feature: after building a stable design, users can generate a professional 1200×800px PNG "Stability Certificate" with one click. Furniture makers share these on their website, Etsy, or Instagram as proof their design is physics-validated.
+
+### Components
+- `components/StabilityCertificate.tsx` — Canvas API certificate generator (no Three.js)
+- `components/PhysicsHUD.tsx` — Updated with certificate download button + share modal
+
+### Certificate Design
+- 1200×800px PNG with warm dark gradient background
+- Left panel: FORMA logo, grade letter (A/B/C/D), stability score percentage
+- Right panel: "PHYSICS VALIDATED", design name, date, 2×2 stats grid (parts/weight/height/cost)
+- Decorative: large "F" watermark, QR placeholder, unique FORMA-XXXX-XXXX ID, terracotta border
+- Fonts: Syne 800 (display), DM Mono (data), loaded via FontFace API
+
+### Share Flow
+1. User clicks "🏆 Certificaat downloaden" in PhysicsHUD (only visible when stable)
+2. Certificate PNG auto-downloads as `forma-certificate-[date].png`
+3. Share modal opens (320px) with preview thumbnail + 3 action buttons:
+   - 📸 Download PNG
+   - 🔗 Kopieer link
+   - 📤 Deel op Twitter/X (pre-filled viral tweet text)
+4. Analytics event `certificate_downloaded` is tracked
+
+### API Endpoint
+```
+POST /designs/{id}/certificate
+```
+- Requires auth (JWT)
+- Generates or reuses FORMA-XXXX-XXXX certificate ID
+- Updates `certificate_id`, `certificate_generated_at`, `certificate_downloads` in DB
+- Returns `{ certificate_id, share_url, generated_at }`
+
+### Database Migration
+Run `backend/migrations/003_certificates.sql` in Supabase SQL Editor:
+- Adds `certificate_id TEXT UNIQUE`
+- Adds `certificate_generated_at TIMESTAMPTZ`
+- Adds `certificate_downloads INT DEFAULT 0`
+- Creates index on `certificate_id`
+
+### Grade Colors
+- A = `#3ec87a` (groen)
+- B = `#8bc47a`
+- C = `#e8a84e`
+- D = `#e05252` (rood)
