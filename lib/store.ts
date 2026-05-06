@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+himport { create } from 'zustand'
 import { PlacedPart, PRESETS, PresetName, CustomPart } from './parts'
 import { validatePhysics, PhysicsResult } from './physics'
 import {
@@ -127,7 +127,27 @@ export const useFormaStore = create<FormaState>((set, get) => ({
   customParts: [],
   showPhotoTo3D: false,
 
-  // ── Design actions ─────────────────────────────────────────
+  // ── Custom parts actions ────────────────────────────────
+  addCustomPart: (part) => set((state) => {
+    const customParts = [...state.customParts, part]
+    if (typeof window !== 'undefined') localStorage.setItem('forma_custom_parts', JSON.stringify(customParts))
+    return { customParts }
+  }),
+  removeCustomPart: (id) => set((state) => {
+    const customParts = state.customParts.filter((p) => p.id !== id)
+    if (typeof window !== 'undefined') localStorage.setItem('forma_custom_parts', JSON.stringify(customParts))
+    return { customParts }
+  }),
+  loadCustomParts: async () => {
+    if (typeof window === 'undefined') return
+    try {
+      const stored = localStorage.getItem('forma_custom_parts')
+      if (stored) set({ customParts: JSON.parse(stored) })
+    } catch (_) {}
+  },
+  setShowPhotoTo3D: (v) => set({ showPhotoTo3D: v }),
+
+    // ── Design actions ─────────────────────────────────────────
   addPart: (part) => set((state) => {
     const newPart = { ...part, id: newId() }
     const parts = [...state.parts, newPart]
