@@ -352,7 +352,7 @@ export default function Forma3D() {
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
     const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
     const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera({ x, y }, sc.camera)
+    raycaster.setFromCamera(new THREE.Vector2(x, y), sc.camera)
     const meshArray = Array.from(sc.meshes.values())
     return raycaster.intersectObjects(meshArray)
   }, [])
@@ -377,7 +377,7 @@ export default function Forma3D() {
       const rect = mountRef.current!.getBoundingClientRect()
       const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1
       const my = -((e.clientY - rect.top) / rect.height) * 2 + 1
-      raycaster.setFromCamera({ x: mx, y: my }, sc.camera)
+      raycaster.setFromCamera(new THREE.Vector2(mx, my), sc.camera)
       const pt = new THREE.Vector3()
       raycaster.ray.intersectPlane(s.dragPlane, pt)
       if (pt) s.dragOffset.subVectors(mesh.position, pt)
@@ -415,7 +415,7 @@ export default function Forma3D() {
       const rect = mountRef.current!.getBoundingClientRect()
       const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1
       const my = -((e.clientY - rect.top) / rect.height) * 2 + 1
-      raycaster.setFromCamera({ x: mx, y: my }, sc.camera)
+      raycaster.setFromCamera(new THREE.Vector2(mx, my), sc.camera)
       const pt = new THREE.Vector3()
       raycaster.ray.intersectPlane(s.dragPlane, pt)
       if (pt) {
