@@ -1,4 +1,4 @@
-himport { create } from 'zustand'
+import { create } from 'zustand'
 import { PlacedPart, PRESETS, PresetName, CustomPart } from './parts'
 import { validatePhysics, PhysicsResult } from './physics'
 import {
@@ -34,7 +34,7 @@ interface FormaState {
   showCommandPalette: boolean
   showTutorial: boolean
   tutorialStep: number
-  sidebarTab: 'parts' | 'real' | 'presets'
+  sidebarTab: 'parts' | 'real' | 'presets' | 'library'
 
   // ── History ────────────────────────────────────────────────
   history: PlacedPart[][]
@@ -81,7 +81,7 @@ interface FormaState {
   setShowCommandPalette: (v: boolean) => void
   setShowTutorial: (v: boolean) => void
   setTutorialStep: (v: number) => void
-  setSidebarTab: (v: 'parts' | 'real' | 'presets') => void
+  setSidebarTab: (v: 'parts' | 'real' | 'presets' | 'library') => void
 
   // ── History actions ────────────────────────────────────────
   undo: () => void
