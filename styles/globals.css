@@ -315,3 +315,28 @@ input:focus {
 }
 .smart-guide.horizontal { height: 1px; left: 0; right: 0; }
 .smart-guide.vertical   { width: 1px; top: 0; bottom: 0; }
+
+
+  /* ── B&W THEME ─────────────────────────────────────────────── */
+:root.bw {
+    --bg: #0a0a0a;
+    --bg2: #111111;
+    --panel: #141414;
+    --p2: #1a1a1a;
+    --p3: #222222;
+    --p4: #2a2a2a;
+    --bd: rgba(255,255,255,0.08);
+    --bd2: rgba(255,255,255,0.14);
+    --bd3: rgba(255,255,255,0.22);
+    --t: #ffffff;
+    --t2: #888888;
+    --t3: #444444;
+    --acc: #ffffff;
+    --acc2: #cccccc;
+    --acc-glow: rgba(255,255,255,0.12);
+    --gr: #ffffff;
+    --rd: #888888;
+    --sh: 0 1px 3px rgba(0,0,0,0.5);
+    --sh2: 0 8px 32px rgba(0,0,0,0.6);
+    --sh3: 0 24px 64px rgba(0,0,0,0.7);
+}
