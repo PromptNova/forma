@@ -183,7 +183,7 @@ export default function Sidebar() {
             <motion.div key="parts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               {/* Basic parts by category */}
               {Object.entries(PART_CATEGORIES).map(([cat, ids]) => {
-                const catParts = (ids as string[]).filter(id => !id.startsWith('prod-'))
+                const catParts = (ids as string[])
                 const visibleCatParts = catParts.filter(id => {
                   const p = PARTS[id]
                   return p && (!search || p.label.toLowerCase().includes(search.toLowerCase()))
