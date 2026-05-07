@@ -124,13 +124,13 @@ export default function Home() {
                           <Sidebar />
                           <div style={{ flex: 1, position: 'relative', background: 'var(--bg2)' }}>
                                       <Forma3D />
-                          </div>div>
+                          </div>
                           <PropsPanel />
-                </div>div>
+                </div>
           {showCommandPalette && <CommandPalette />}
           {showSettings && <Settings />}
           {showTutorial && <Tutorial />}
           {showPhotoTo3D && <PhotoTo3D onClose={() => setShowPhotoTo3D(false)} />}
-        </div>div>
+        </div>
       )
 }
