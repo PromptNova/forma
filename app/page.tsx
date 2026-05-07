@@ -1,6 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic'
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useFormaStore } from '../lib/store'
 
 const Topbar = dynamic(() => import('../components/Topbar'), { ssr: false })
